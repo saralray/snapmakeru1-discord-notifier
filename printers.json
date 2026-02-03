@@ -1,0 +1,12 @@
+[
+  {
+    "name": "U1-01",
+    "ip": "172.16.20.21",
+    "last_status": "printing"
+  },
+  {
+    "name": "U1-02",
+    "ip": "172.16.20.22",
+    "last_status": "printing"
+  }
+]
