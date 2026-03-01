@@ -1,12 +1,10 @@
-version: "3.9"
-
 services:
-  snapmaker-u1-discord:
+  snapmaker-bot:
     build: .
-    container_name: snapmaker-u1-discord
+    image: snapmaker-discord-bot:latest
+    container_name: snapmaker-discord-bot
     restart: unless-stopped
     env_file:
       - .env
     volumes:
       - ./printers.json:/app/printers.json
-    network_mode: "host"

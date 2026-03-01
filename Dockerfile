@@ -5,7 +5,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY notifier.py .
-COPY printers.json .
+COPY . .
 
-CMD ["python", "notifier.py"]
+CMD ["python", "bot.py"]
