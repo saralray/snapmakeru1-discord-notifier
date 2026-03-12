@@ -32,14 +32,17 @@ Discord using webhooks.
     git clone https://github.com/yourusername/snapmakeru1-discord-notifier.git
     cd snapmakeru1-discord-notifier
 
-### 2. Install dependencies
+### 2. Create .env file
 
-    pip install -r requirements.txt
+    DISCORD_TOKEN=
+    GUILD_ID=
+    CHANNEL_ID=
+    POLL_INTERVAL=20
 
-### 3. Create .env file
+### 3. Run Docker  
 
-    DISCORD_WEBHOOK=https://discord.com/api/webhooks/XXXXXXXX
-    POLL_INTERVAL=30
+    docker compose up -d
+
 
 ------------------------------------------------------------------------
 
