@@ -1,6 +1,7 @@
+printers.json
+test.py
 .env
 __pycache__/
 *.pyc
 .vscode/
-printers.json
-test.py
+

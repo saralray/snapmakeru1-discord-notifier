@@ -192,8 +192,54 @@ async def filament(interaction: discord.Interaction, printer: str):
     except Exception as e:
         await interaction.followup.send(f"Error: {e}")
 
+@tree.command(
+    name="addprinter",
+    description="Add a printer to monitor",
+    guild=discord.Object(id=GUILD_ID)
+)
+@app_commands.describe(name="Printer name", url="Printer API URL")
+async def add_printer(interaction: discord.Interaction, name: str, url: str):
+    printers = load_printers()
+    if any(p["name"] == name for p in printers):
+        await interaction.response.send_message("Printer with that name already exists.")
+        return
+
+    printers.append({
+        "name": name,
+        "url": url,
+        "last_state": "UNKNOWN"
+    })
+    save_printers(printers)
+    await interaction.response.send_message(f"Added printer '{name}'.")
+
+@tree.command(
+    name="removeprinter",
+    description="Remove a printer from monitoring",
+    guild=discord.Object(id=GUILD_ID)
+)
+@app_commands.describe(printer="Printer name")
+async def remove_printer(interaction: discord.Interaction, printer: str):
+    printers = load_printers()
+    updated = [p for p in printers if p["name"] != printer]
+
+    if len(updated) == len(printers):
+        await interaction.response.send_message("Printer not found.")
+        return
+
+    save_printers(updated)
+    await interaction.response.send_message(f"Removed printer '{printer}'.")
+
+
 
 @filament.autocomplete("printer")
+async def printer_autocomplete(interaction: discord.Interaction, current: str):
+    printers = load_printers()
+    return [
+        app_commands.Choice(name=p["name"], value=p["name"])
+        for p in printers if current.lower() in p["name"].lower()
+    ]
+
+@remove_printer.autocomplete("printer")
 async def printer_autocomplete(interaction: discord.Interaction, current: str):
     printers = load_printers()
     return [
