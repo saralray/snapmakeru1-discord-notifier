@@ -6,11 +6,7 @@ Discord using webhooks.
 
 ## Features
 
--   Detects print started
--   Detects print completed
--   Detects print cancelled
--   Detects idle status
--   Detects offline status
+-   Detects print started, completed, cancelled, offline
 -   Multi-printer support
 -   Docker support
 -   Configurable polling interval
@@ -19,9 +15,9 @@ Discord using webhooks.
 
 ## Requirements
 
--   Python 3.9+
--   Moonraker API enabled
--   Discord Webhook URL
+-   Python 3.11+
+-   Advance Mode Enable (printer)
+-   Discord Bot
 
 ------------------------------------------------------------------------
 
@@ -47,8 +43,9 @@ Discord using webhooks.
 ------------------------------------------------------------------------
 
 
-## Run
+## Run (no docker)
 
-    python bot.py
+    pip install -r requirements.txt
+    python3 bot.py
 
 
