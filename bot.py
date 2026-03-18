@@ -69,12 +69,23 @@ def build_state_embed(printer_name, state, data):
         title=f"Printer {printer_name}  {label}  {icon}",
         color=color
     )
+    
+    embed.add_field(
+        name="State",
+        value=label,
+        inline=True
+    )
 
-    embed.description = (
-        "```"
-        f"{'State':<10}{'Time':<10}{'Filament'}\n"
-        f"{label:<10}{f'{hours}h {minutes:02d}m':<10}{filament:.1f} g"
-        "```"
+    embed.add_field(
+        name="Time",
+        value=f"{hours}h {minutes:02d}m",
+        inline=True
+    )
+
+    embed.add_field(
+        name="Filament",
+        value=f"{filament:.1f} g",
+        inline=True
     )
 
     embed.add_field(
