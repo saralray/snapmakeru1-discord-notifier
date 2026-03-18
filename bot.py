@@ -37,74 +37,48 @@ def save_printers(data):
 
 def build_state_embed(printer_name, printer_url, state, data):
     state = state.upper()
-    file = None 
-
-    if state == "PRINTING":
-        color = 0x3b82f6
-        icon = "▶️"
-        label = "STARTED"
-    elif state == "COMPLETE":
-        color = 0x22c55e
-        icon = "✅"
-        label = "COMPLETED"
-    elif state == "CANCELLED":
-        color = 0xef4444
-        icon = "❌"
-        label = "CANCELLED"
-    elif state == "ERROR":
-        color = 0xef4444
-        icon = "🚨"
-        label = "ERROR"
-    else:
-        color = 0xef4444
-        icon = "🔴"
-        label = "OFFLINE"
+    file = None
 
     total_seconds = int(data.get("print_duration", 0))
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
 
     filament = data.get("filament_used", 0) / 1000 * 3
-    filename = data.get("filename", "-")
+    filename = data.get("filename") or "-"
+
+    # State config
+    config = {
+        "PRINTING":  ("STARTED", "▶️", 0x3b82f6),
+        "COMPLETE":  ("COMPLETED", "✅", 0x22c55e),
+        "CANCELLED": ("CANCELLED", "❌", 0xef4444),
+        "ERROR":     ("ERROR", "🚨", 0xef4444),
+        "OFFLINE":   ("OFFLINE", "🔴", 0xef4444),
+    }
+
+    label, icon, color = config.get(state, config["OFFLINE"])
 
     embed = discord.Embed(
-        title=f"Printer {printer_name}  {label}  {icon}",
+        title=f"Printer {printer_name}  {label}",
         color=color
     )
 
-    embed.add_field(
-        name="State",
-        value=label,
-        inline=True
-    )
+    # Common fields
+    if state == "PRINTING":
+        embed.add_field(name="File", value=filename, inline=False)
 
-    embed.add_field(
-        name="Time",
-        value=f"{hours}h {minutes:02d}m",
-        inline=True
-    )
+    elif state in ["COMPLETE", "CANCELLED", "ERROR"]:
+        embed.add_field(name="Time", value=f"{hours}h {minutes:02d}m", inline=True)
+        embed.add_field(name="Filament", value=f"{filament:.1f} g", inline=True)
+        embed.add_field(name="File", value=filename, inline=False)
 
-    embed.add_field(
-        name="Filament",
-        value=f"{filament:.1f} g",
-        inline=True
-    )
-
-    if state in ["ERROR","CANCELLED", "COMPLETE"]:
+        # Snapshot
         try:
             response = requests.get(f"{printer_url}/webcam/snapshot.jpg", timeout=5)
             image_bytes = BytesIO(response.content)
-
             file = discord.File(image_bytes, filename="snapshot.jpg")
             embed.set_image(url="attachment://snapshot.jpg")
         except Exception as e:
             print("Snapshot error:", e)
-
-    embed.add_field(
-        name="File",
-        value=filename if filename else "-",
-        inline=False
-    )
 
     return embed, file
 
