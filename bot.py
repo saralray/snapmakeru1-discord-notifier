@@ -20,10 +20,10 @@ intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-
 def load_printers():
     with open(PRINTER_FILE, "r") as f:
-        return json.load(f)
+        data = json.load(f)
+        return sorted(data, key=lambda p: p["name"].lower())
 
 
 def save_printers(data):
@@ -35,7 +35,7 @@ def save_printers(data):
 # STATE CARD STYLE
 # =========================
 
-def build_state_embed(printer_name, printer_url, state, data):
+def build_state_embed(printer_name, printer_url, api_key, state, data):
     state = state.upper()
     file = None
 
@@ -73,7 +73,11 @@ def build_state_embed(printer_name, printer_url, state, data):
 
         # Snapshot
         try:
-            response = requests.get(f"{printer_url}/webcam/snapshot.jpg", timeout=5)
+            response = requests.get(
+                f"{printer_url}/webcam/snapshot.jpg",
+                headers={"X-Api-Key": api_key},
+                timeout=5
+            )
             image_bytes = BytesIO(response.content)
             file = discord.File(image_bytes, filename="snapshot.jpg")
             embed.set_image(url="attachment://snapshot.jpg")
@@ -132,6 +136,7 @@ async def filament(interaction: discord.Interaction, printer: str):
     try:
         r = requests.get(
             f"{selected['url']}/printer/objects/query?print_task_config",
+            headers={"X-Api-Key": selected["api_key"]},
             timeout=5
         )
 
@@ -172,8 +177,8 @@ async def filament(interaction: discord.Interaction, printer: str):
     guild=discord.Object(id=GUILD_ID)
 )
 #@app_commands.describe(name="Printer name", URL="Printer URL address")
-@app_commands.describe(name="Printer name", ip="Printer IP address")
-async def add_printer(interaction: discord.Interaction, name: str, ip: str):
+@app_commands.describe(name="Printer name", ip="Printer IP address", api_key="Moonraker API key")
+async def add_printer(interaction: discord.Interaction, name: str, ip: str, api_key: str):
     printers = load_printers()
     if any(p["name"] == name for p in printers):
         await interaction.response.send_message("Printer with that name already exists.")
@@ -181,10 +186,12 @@ async def add_printer(interaction: discord.Interaction, name: str, ip: str):
 
     printers.append({
         "name": name,
-        "url": "http://" + ip,#async def add_printer(interaction: discord.Interaction, name: str, URL: str):    
+        "url": "http://" + ip,
+        "api_key": api_key,
         #"url": "https://" + ip,  # Uncomment if using HTTPS
         "last_state": "UNKNOWN"
     })
+    printers.sort(key=lambda p: p["name"].lower())
     save_printers(printers)
     embed = discord.Embed(
         title="Printer Added",
@@ -250,18 +257,21 @@ async def monitor_printers():
             try:
                 r = requests.get(
                     f"{printer['url']}/printer/objects/query?print_stats",
+                    headers={"X-Api-Key": f"{printer['api_key']}"},
                     timeout=5
                 )
                 data = r.json()["result"]["status"]["print_stats"]
                 state = data.get("state", "OFFLINE")
-            except:
+            except Exception as e:
+                print(f"[ERROR] {printer['name']}: {e}")
                 state = "OFFLINE"
                 data = {}
 
-            if printer["last_state"] != state:
+            if printer.get("last_state") != state:
                 embed, file = build_state_embed(
                     printer["name"],
                     printer["url"],
+                    printer["api_key"],
                     state,
                     data
                 )
