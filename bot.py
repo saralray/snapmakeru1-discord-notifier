@@ -39,7 +39,7 @@ def build_state_embed(printer_name, state, data):
 
     if state == "PRINTING":
         color = 0x3b82f6
-        icon = "▶"
+        icon = "▶️"
         label = "STARTED"
     elif state == "COMPLETE":
         color = 0x22c55e
@@ -51,7 +51,7 @@ def build_state_embed(printer_name, state, data):
         label = "CANCELLED"
     elif state == "ERROR":
         color = 0xef4444
-        icon = "❌"
+        icon = "🚨"
         label = "ERROR"
     else:
         color = 0xef4444
@@ -62,18 +62,18 @@ def build_state_embed(printer_name, state, data):
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
 
-    filament = data.get("filament_used", 0) / 1000
+    filament = data.get("filament_used", 0) / 1000 * 3
     filename = data.get("filename", "-")
 
     embed = discord.Embed(
-        title=f"{printer_name} {icon} {label}",
+        title=f"Printer {printer_name}  {label}  {icon}",
         color=color
     )
 
     embed.description = (
         "```"
         f"{'State':<10}{'Time':<10}{'Filament'}\n"
-        f"{label:<10}{f'{hours}h {minutes:02d}m':<10}{filament:.1f} m"
+        f"{label:<10}{f'{hours}h {minutes:02d}m':<10}{filament:.1f} g"
         "```"
     )
 
