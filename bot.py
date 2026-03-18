@@ -34,7 +34,7 @@ def save_printers(data):
 # STATE CARD STYLE
 # =========================
 
-def build_state_embed(printer_name, state, data):
+def build_state_embed(printer_name, printer_url, state, data):
     state = state.upper()
 
     if state == "PRINTING":
@@ -69,7 +69,7 @@ def build_state_embed(printer_name, state, data):
         title=f"Printer {printer_name}  {label}  {icon}",
         color=color
     )
-    
+
     embed.add_field(
         name="State",
         value=label,
@@ -87,6 +87,9 @@ def build_state_embed(printer_name, state, data):
         value=f"{filament:.1f} g",
         inline=True
     )
+
+    if state in ["ERROR","CANCELLED", "COMPLETE"]:
+        embed.set_image(url=f"{printer_url}/webcam/snapshot.jpg")
 
     embed.add_field(
         name="File",
@@ -162,7 +165,7 @@ async def filament(interaction: discord.Interaction, printer: str):
             circle = hex_to_circle(hex_color)
             loaded = cfg["filament_exist"][i]
 
-            status = "🟢 **Loaded**" if loaded else "🔴 **Empty**"
+            status = "**Loaded**" if loaded else "**Empty**"
 
             embed.add_field(
                 name=f"Slot {i+1} {circle}",
@@ -214,7 +217,7 @@ async def monitor_printers():
                 data = {}
 
             if printer["last_state"] != state:
-                embed = build_state_embed(printer["name"], state, data)
+                embed = build_state_embed(printer["name"],printer["url"], state, data)
                 await channel.send(embed=embed)
                 printer["last_state"] = state
 
