@@ -197,8 +197,9 @@ async def filament(interaction: discord.Interaction, printer: str):
     description="Add a printer to monitor",
     guild=discord.Object(id=GUILD_ID)
 )
-@app_commands.describe(name="Printer name", url="Printer API URL")
-async def add_printer(interaction: discord.Interaction, name: str, url: str):
+#@app_commands.describe(name="Printer name", URL="Printer URL address")
+@app_commands.describe(name="Printer name", ip="Printer IP address")
+async def add_printer(interaction: discord.Interaction, name: str, ip: str):
     printers = load_printers()
     if any(p["name"] == name for p in printers):
         await interaction.response.send_message("Printer with that name already exists.")
@@ -206,11 +207,18 @@ async def add_printer(interaction: discord.Interaction, name: str, url: str):
 
     printers.append({
         "name": name,
-        "url": url,
+        "url": "http://" + ip,#async def add_printer(interaction: discord.Interaction, name: str, URL: str):    
+        #"url": "https://" + ip,  # Uncomment if using HTTPS
         "last_state": "UNKNOWN"
     })
     save_printers(printers)
-    await interaction.response.send_message(f"Added printer '{name}'.")
+    embed = discord.Embed(
+        title="Printer Added",
+        description=f"Added printer '{name}' with IP: {ip}",
+        #description=f"Added printer '{name}' with URL: http://{URL}", # Uncomment if using HTTPS
+        color=0x22c55e
+    )
+    await interaction.response.send_message(embed=embed)
 
 @tree.command(
     name="removeprinter",
@@ -227,7 +235,12 @@ async def remove_printer(interaction: discord.Interaction, printer: str):
         return
 
     save_printers(updated)
-    await interaction.response.send_message(f"Removed printer '{printer}'.")
+    embed = discord.Embed(
+        title="Printer Removed",
+        description=f"Removed printer '{printer}' from monitoring.",
+        color=0xef4444
+    )
+    await interaction.response.send_message(embed=embed)
 
 
 
