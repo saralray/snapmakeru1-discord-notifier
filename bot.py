@@ -3,6 +3,7 @@ import json
 import asyncio
 import discord
 import requests
+from io import BytesIO
 from discord import app_commands
 from dotenv import load_dotenv
 
@@ -36,6 +37,7 @@ def save_printers(data):
 
 def build_state_embed(printer_name, printer_url, state, data):
     state = state.upper()
+    file = None 
 
     if state == "PRINTING":
         color = 0x3b82f6
@@ -89,7 +91,14 @@ def build_state_embed(printer_name, printer_url, state, data):
     )
 
     if state in ["ERROR","CANCELLED", "COMPLETE"]:
-        embed.set_image(url=f"{printer_url}/webcam/snapshot.jpg")
+        try:
+            response = requests.get(f"{printer_url}/webcam/snapshot.jpg", timeout=5)
+            image_bytes = BytesIO(response.content)
+
+            file = discord.File(image_bytes, filename="snapshot.jpg")
+            embed.set_image(url="attachment://snapshot.jpg")
+        except Exception as e:
+            print("Snapshot error:", e)
 
     embed.add_field(
         name="File",
@@ -97,7 +106,7 @@ def build_state_embed(printer_name, printer_url, state, data):
         inline=False
     )
 
-    return embed
+    return embed, file
 
 
 # =========================
@@ -217,8 +226,16 @@ async def monitor_printers():
                 data = {}
 
             if printer["last_state"] != state:
-                embed = build_state_embed(printer["name"],printer["url"], state, data)
-                await channel.send(embed=embed)
+                embed, file = build_state_embed(
+                    printer["name"],
+                    printer["url"],
+                    state,
+                    data
+                )
+                if file:
+                    await channel.send(embed=embed, file=file)
+                else:
+                    await channel.send(embed=embed)
                 printer["last_state"] = state
 
         save_printers(printers)
