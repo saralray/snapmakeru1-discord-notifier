@@ -29,7 +29,7 @@ Discord using webhooks.
 
 ### 1. Clone the repository
 
-    git clone https://github.com/yourusername/snapmakeru1-discord-notifier.git
+    git clone https://github.com/saralray/snapmakeru1-discord-notifier.git
     cd snapmakeru1-discord-notifier
 
 ### 2. Create .env file
@@ -46,42 +46,9 @@ Discord using webhooks.
 
 ------------------------------------------------------------------------
 
-## Configure printers.json
-
-Example:
-
-\[ { "name": "Snapmaker-U1-1", "ip": "192.168.1.100", "last_status":
-"idle" }\]
-
-------------------------------------------------------------------------
 
 ## Run
 
-    python notifier.py
+    python bot.py
 
-------------------------------------------------------------------------
 
-## Docker
-
-Build:
-
-    docker build -t snapmaker-notifier .
-
-Run:
-
-    docker run -d       --name snapmaker-notifier       --env-file .env       -v $(pwd)/printers.json:/app/printers.json       snapmaker-notifier
-
-------------------------------------------------------------------------
-
-## Environment Variables
-
-  Variable          Description               Default
-  ----------------- ------------------------- ----------
-  DISCORD_WEBHOOK   Discord webhook URL       Required
-  POLL_INTERVAL     Poll interval (seconds)   30
-
-------------------------------------------------------------------------
-
-## License
-
-MIT License
