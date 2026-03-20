@@ -75,7 +75,7 @@ async def build_state_embed(printer_name, printer_url, api_key, state, data):
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
 
-    filament = data.get("filament_used", 0) / 1000
+    filament = data.get("filament_used", 0) / 1000 *3
     filename = data.get("filename") or "-"
 
     config = {
@@ -85,6 +85,7 @@ async def build_state_embed(printer_name, printer_url, api_key, state, data):
         "ERROR":     ("ERROR", 0xef4444),
         "PAUSED":    ("PAUSED", 0xfacc15),
         "OFFLINE":   ("OFFLINE", 0xef4444),
+        "ONLINE":    ("ONLINE", 0x22c55e),
     }
 
     label, color = config.get(state, config["OFFLINE"])
@@ -107,7 +108,7 @@ async def build_state_embed(printer_name, printer_url, api_key, state, data):
 
     elif state in ["COMPLETE", "CANCELLED", "ERROR"]:
         embed.add_field(name="Time", value=f"{hours}h {minutes:02d}m", inline=True)
-        embed.add_field(name="Filament", value=f"{filament:.1f} m", inline=True)
+        embed.add_field(name="Filament", value=f"{filament:.1f} g", inline=True)
         embed.add_field(name="File", value=filename, inline=False)
 
         # ===== OLD IMAGE SYSTEM (kept) =====
@@ -214,12 +215,21 @@ async def filament(interaction: discord.Interaction, printer: str):
 # ADD / REMOVE
 # =========================
 
-@tree.command(name="addprinter", description="Add printer", guild=discord.Object(id=GUILD_ID))
+@tree.command(
+    name="addprinter",
+    description="Add printer",
+    guild=discord.Object(id=GUILD_ID)
+)
 async def add_printer(interaction: discord.Interaction, name: str, ip: str, api_key: str):
     printers = load_printers()
 
     if any(p["name"] == name for p in printers):
-        await interaction.response.send_message("Printer already exists.")
+        embed = discord.Embed(
+            title="Error",
+            description="Printer already exists.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed)
         return
 
     printers.append({
@@ -230,20 +240,44 @@ async def add_printer(interaction: discord.Interaction, name: str, ip: str, api_
     })
 
     save_printers(printers)
-    await interaction.response.send_message(f"Printer added: {name} ({ip})")
 
+    embed = discord.Embed(
+        title="Printer Added",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Name", value=name, inline=True)
+    embed.add_field(name="IP Address", value=ip, inline=True)
+    embed.set_footer(text="Successfully added printer")
 
-@tree.command(name="removeprinter", description="Remove printer", guild=discord.Object(id=GUILD_ID))
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(
+    name="removeprinter",
+    description="Remove printer",
+    guild=discord.Object(id=GUILD_ID)
+)
 async def remove_printer(interaction: discord.Interaction, printer: str):
     printers = load_printers()
     updated = [p for p in printers if p["name"] != printer]
 
     if len(updated) == len(printers):
-        await interaction.response.send_message("Printer not found.")
+        embed = discord.Embed(
+            title="Error",
+            description="Printer not found.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed)
         return
 
     save_printers(updated)
-    await interaction.response.send_message(f"Printer removed: {printer}")
+
+    embed = discord.Embed(
+        title="Printer Removed",
+        description=f"Removed **{printer}**",
+        color=discord.Color.orange()
+    )
+
+    await interaction.response.send_message(embed=embed)
 
 
 # =========================
@@ -289,26 +323,60 @@ async def monitor_printers():
                 )
 
                 data = r.get("result", {}).get("status", {}).get("print_stats", {})
-                state = data.get("state", "OFFLINE")
+                state = data.get("state", "UNKNOWN")
 
             except:
-                state = "OFFLINE"
+                state = "UNKNOWN"
                 data = {}
 
-            if not first_run and printer.get("last_state") != state:
-                embed, file = await build_state_embed(
-                    printer["name"],
-                    printer["url"],
-                    printer["api_key"],
-                    state,
-                    data
-                )
+            last_state = printer.get("last_state", "UNKNOWN")
 
-                if file:
-                    await channel.send(embed=embed, file=file)
-                else:
-                    await channel.send(embed=embed)
+            if not first_run:
 
+                # 🔴 Went OFFLINE
+                if state == "UNKNOWN" and last_state != "UNKNOWN":
+                    await channel.send(embed=discord.Embed(
+                        title=f"Printer {printer['name']}   OFFLINE",
+                        description="Connection lost",
+                        color=0xef4444
+                    ))
+
+                # 🟢 Came ONLINE
+                elif last_state in ["UNKNOWN"] and state != "UNKNOWN":
+                    await channel.send(embed=discord.Embed(
+                        title=f"Printer {printer['name']}   ONLINE",
+                        description="Connection restored",
+                        color=0x22c55e
+                    ))
+
+                    # Send current state after recovery
+                    embed, file = await build_state_embed(
+                        printer["name"],
+                        printer["url"],
+                        printer["api_key"],
+                        state,
+                        data
+                    )
+
+                    if file:
+                        await channel.send(embed=embed, file=file)
+                    else:
+                        await channel.send(embed=embed)
+
+                # 🔄 Normal state change (not involving offline)
+                elif state != last_state:
+                    embed, file = await build_state_embed(
+                        printer["name"],
+                        printer["url"],
+                        printer["api_key"],
+                        state,
+                        data
+                    )
+
+                    if file:
+                        await channel.send(embed=embed, file=file)
+                    else:
+                        await channel.send(embed=embed)
             printer["last_state"] = state
 
         save_printers(printers)
