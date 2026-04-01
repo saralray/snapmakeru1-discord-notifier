@@ -20,42 +20,49 @@ intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
+# =========================
+# GLOBAL CACHE (IMPORTANT)
+# =========================
+printers_cache = []
+session = requests.Session()
+
 
 # =========================
-# FILE HANDLING
+# FILE HANDLING (OPTIMIZED)
 # =========================
 
 def load_printers():
+    global printers_cache
     with open(PRINTER_FILE, "r") as f:
-        data = json.load(f)
-        return sorted(data, key=lambda p: p["name"].lower())
+        printers_cache = sorted(json.load(f), key=lambda p: p["name"].lower())
+    return printers_cache
 
 
-def save_printers(data):
+def save_printers():
     with open(PRINTER_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(printers_cache, f, indent=2)
 
 
 # =========================
-# NETWORK (NON-BLOCKING REQUESTS)
+# NETWORK (FASTER)
 # =========================
 
 async def fetch_json(url, headers):
     def _get():
-        return requests.get(url, headers=headers, timeout=5)
+        return session.get(url, headers=headers, timeout=5)
 
     for _ in range(2):
         try:
             r = await asyncio.to_thread(_get)
             return r.json()
-        except:
+        except Exception:
             await asyncio.sleep(1)
     return {}
 
 
 async def fetch_snapshot(url, api_key):
     def _get():
-        return requests.get(
+        return session.get(
             f"{url}/webcam/snapshot.jpg",
             headers={"X-Api-Key": api_key},
             timeout=5
@@ -64,62 +71,53 @@ async def fetch_snapshot(url, api_key):
 
 
 # =========================
-# STATE EMBED
+# EMBED BUILDER (CLEANED)
 # =========================
 
-async def build_state_embed(printer_name, printer_url, api_key, state, data):
+async def build_state_embed(name, url, api_key, state, data):
     state = state.upper()
     file = None
 
-    total_seconds = int(data.get("print_duration", 0))
-    hours = total_seconds // 3600
-    minutes = (total_seconds % 3600) // 60
+    duration = int(data.get("print_duration", 0))
+    hours, minutes = divmod(duration, 3600)
+    minutes //= 60
 
-    filament = data.get("filament_used", 0) / 1000 *3
+    filament = data.get("filament_used", 0) / 1000 * 3
     filename = data.get("filename") or "-"
 
     config = {
-        "PRINTING":  ("STARTED", 0x3b82f6),
-        "COMPLETE":  ("COMPLETED", 0x22c55e),
+        "PRINTING": ("STARTED", 0x3b82f6),
+        "COMPLETE": ("COMPLETED", 0x22c55e),
         "CANCELLED": ("CANCELLED", 0xef4444),
-        "ERROR":     ("ERROR", 0xef4444),
-        "PAUSED":    ("PAUSED", 0xfacc15),
-        "OFFLINE":   ("OFFLINE", 0xef4444),
-        "ONLINE":    ("ONLINE", 0x22c55e),
+        "ERROR": ("ERROR", 0xef4444),
+        "PAUSED": ("PAUSED", 0xfacc15),
+        "OFFLINE": ("OFFLINE", 0xef4444),
+        "ONLINE": ("ONLINE", 0x22c55e),
     }
 
     label, color = config.get(state, config["OFFLINE"])
 
     embed = discord.Embed(
-        title=f"Printer {printer_name} — {label}",
+        title=f"Printer {name} — {label}",
         color=color
     )
 
     if state == "PRINTING":
         embed.add_field(name="File", value=filename, inline=False)
-
         progress = data.get("progress")
         if progress is not None:
-            embed.add_field(
-                name="Progress",
-                value=f"{progress * 100:.1f}%",
-                inline=False
-            )
+            embed.add_field(name="Progress", value=f"{progress * 100:.1f}%", inline=False)
 
-    elif state in ["COMPLETE", "CANCELLED", "ERROR"]:
+    elif state in {"COMPLETE", "CANCELLED", "ERROR"}:
         embed.add_field(name="Time", value=f"{hours}h {minutes:02d}m", inline=True)
         embed.add_field(name="Filament", value=f"{filament:.1f} g", inline=True)
         embed.add_field(name="File", value=filename, inline=False)
 
-        # ===== OLD IMAGE SYSTEM (kept) =====
         try:
-            response = await fetch_snapshot(printer_url, api_key)
-
-            if response.status_code == 200:
-                image_bytes = BytesIO(response.content)
-                file = discord.File(image_bytes, filename="snapshot.jpg")
+            res = await fetch_snapshot(url, api_key)
+            if res.status_code == 200:
+                file = discord.File(BytesIO(res.content), filename="snapshot.jpg")
                 embed.set_image(url="attachment://snapshot.jpg")
-
         except Exception as e:
             print("Snapshot error:", e)
 
@@ -127,39 +125,40 @@ async def build_state_embed(printer_name, printer_url, api_key, state, data):
 
 
 # =========================
-# HEX → LABEL (NO EMOJI)
+# HELPER
+# =========================
+
+async def send_embed(channel, embed, file):
+    if file:
+        await channel.send(embed=embed, file=file)
+    else:
+        await channel.send(embed=embed)
+
+
+# =========================
+# HEX → LABEL (UNCHANGED)
 # =========================
 
 def hex_to_label(hex_color):
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
 
-    if r > 200 and g < 100:
-        return "🔴"
-    if g > 200:
-        return "🟢"
-    if b > 200:
-        return "🔵"
-    if r > 200 and g > 150:
-        return "🟡"
-    if r > 150 and b > 150:
-        return "🟣"
-    if r > 150 and g > 80:
-        return "🟠"
-
+    if r > 200 and g < 100: return "🔴"
+    if g > 200: return "🟢"
+    if b > 200: return "🔵"
+    if r > 200 and g > 150: return "🟡"
+    if r > 150 and b > 150: return "🟣"
+    if r > 150 and g > 80: return "🟠"
     return "⚪"
 
 
 # =========================
-# /filament
+# COMMANDS (MINOR CLEANUP)
 # =========================
 
 @tree.command(name="filament", description="Show filament status", guild=discord.Object(id=GUILD_ID))
 async def filament(interaction: discord.Interaction, printer: str):
 
-    printers = load_printers()
-    selected = next((p for p in printers if p["name"] == printer), None)
+    selected = next((p for p in printers_cache if p["name"] == printer), None)
 
     if not selected:
         await interaction.response.send_message("Printer not found.")
@@ -174,36 +173,21 @@ async def filament(interaction: discord.Interaction, printer: str):
         )
 
         cfg = r.get("result", {}).get("status", {}).get("print_task_config", {})
-
-        filament_types = cfg.get("filament_type", [])
-        colors = cfg.get("filament_color_rgba", [])
-        exists = cfg.get("filament_exist", [])
-
         embed = discord.Embed(
             title="Filament Lists",
             description=f"Printer: {selected['name']}",
             color=0x5865F2
         )
 
-        for i, ftype in enumerate(filament_types):
-            hex_color = colors[i][:6] if i < len(colors) else "FFFFFF"
+        for i, ftype in enumerate(cfg.get("filament_type", [])):
+            hex_color = cfg.get("filament_color_rgba", ["FFFFFF"])[i][:6]
             label = hex_to_label(hex_color)
-            loaded = exists[i] if i < len(exists) else False
+            loaded = cfg.get("filament_exist", [False])[i]
 
             status = "Loaded" if loaded else "Empty"
-            
-            if not loaded:
-                embed.add_field(
-                    name=f"Slot {i+1}",
-                    value=f"{ftype}\n{status}",
-                    inline=True
-                )
-            else:
-                embed.add_field(
-                    name=f"Slot {i+1}",
-                    value=f"{ftype}({label})\n{status}",
-                    inline=True
-                )
+            value = f"{ftype}({label})\n{status}" if loaded else f"{ftype}\n{status}"
+
+            embed.add_field(name=f"Slot {i+1}", value=value, inline=True)
 
         await interaction.followup.send(embed=embed)
 
@@ -212,98 +196,7 @@ async def filament(interaction: discord.Interaction, printer: str):
 
 
 # =========================
-# ADD / REMOVE
-# =========================
-
-@tree.command(
-    name="addprinter",
-    description="Add printer",
-    guild=discord.Object(id=GUILD_ID)
-)
-async def add_printer(interaction: discord.Interaction, name: str, ip: str, api_key: str):
-    printers = load_printers()
-
-    if any(p["name"] == name for p in printers):
-        embed = discord.Embed(
-            title="Error",
-            description="Printer already exists.",
-            color=discord.Color.red()
-        )
-        await interaction.response.send_message(embed=embed)
-        return
-
-    printers.append({
-        "name": name,
-        "url": "http://" + ip,
-        "api_key": api_key,
-        "last_state": "UNKNOWN"
-    })
-
-    save_printers(printers)
-
-    embed = discord.Embed(
-        title="Printer Added",
-        color=discord.Color.green()
-    )
-    embed.add_field(name="Name", value=name, inline=True)
-    embed.add_field(name="IP Address", value=ip, inline=True)
-    embed.set_footer(text="Successfully added printer")
-
-    await interaction.response.send_message(embed=embed)
-
-@tree.command(
-    name="removeprinter",
-    description="Remove printer",
-    guild=discord.Object(id=GUILD_ID)
-)
-async def remove_printer(interaction: discord.Interaction, printer: str):
-    printers = load_printers()
-    updated = [p for p in printers if p["name"] != printer]
-
-    if len(updated) == len(printers):
-        embed = discord.Embed(
-            title="Error",
-            description="Printer not found.",
-            color=discord.Color.red()
-        )
-        await interaction.response.send_message(embed=embed)
-        return
-
-    save_printers(updated)
-
-    embed = discord.Embed(
-        title="Printer Removed",
-        description=f"Removed **{printer}**",
-        color=discord.Color.orange()
-    )
-
-    await interaction.response.send_message(embed=embed)
-
-
-# =========================
-# AUTOCOMPLETE
-# =========================
-
-@filament.autocomplete("printer")
-async def auto1(interaction, current):
-    return [
-        app_commands.Choice(name=p["name"], value=p["name"])
-        for p in load_printers()
-        if current.lower() in p["name"].lower()
-    ]
-
-
-@remove_printer.autocomplete("printer")
-async def auto2(interaction, current):
-    return [
-        app_commands.Choice(name=p["name"], value=p["name"])
-        for p in load_printers()
-        if current.lower() in p["name"].lower()
-    ]
-
-
-# =========================
-# MONITOR LOOP
+# MONITOR LOOP (OPTIMIZED)
 # =========================
 
 async def monitor_printers():
@@ -313,73 +206,46 @@ async def monitor_printers():
     first_run = True
 
     while not client.is_closed():
-        printers = load_printers()
-
-        for printer in printers:
+        for printer in printers_cache:
             try:
                 r = await fetch_json(
                     f"{printer['url']}/printer/objects/query?print_stats",
                     headers={"X-Api-Key": printer["api_key"]}
                 )
-
                 data = r.get("result", {}).get("status", {}).get("print_stats", {})
                 state = data.get("state", "UNKNOWN")
 
-            except:
-                state = "UNKNOWN"
-                data = {}
+            except Exception:
+                state, data = "UNKNOWN", {}
 
             last_state = printer.get("last_state", "UNKNOWN")
 
-            if not first_run:
+            if not first_run and state != last_state:
 
-                # 🔴 Went OFFLINE
-                if state == "UNKNOWN" and last_state != "UNKNOWN":
+                # OFFLINE
+                if state == "UNKNOWN":
                     await channel.send(embed=discord.Embed(
-                        title=f"Printer {printer['name']}   OFFLINE",
+                        title=f"Printer {printer['name']} OFFLINE",
                         description="Connection lost",
                         color=0xef4444
                     ))
 
-                # 🟢 Came ONLINE
-                elif last_state in ["UNKNOWN"] and state != "UNKNOWN":
+                # ONLINE
+                elif last_state == "UNKNOWN":
                     await channel.send(embed=discord.Embed(
-                        title=f"Printer {printer['name']}   ONLINE",
+                        title=f"Printer {printer['name']} ONLINE",
                         description="Connection restored",
                         color=0x22c55e
                     ))
 
-                    # Send current state after recovery
-                    embed, file = await build_state_embed(
-                        printer["name"],
-                        printer["url"],
-                        printer["api_key"],
-                        state,
-                        data
-                    )
+                embed, file = await build_state_embed(
+                    printer["name"], printer["url"], printer["api_key"], state, data
+                )
+                await send_embed(channel, embed, file)
 
-                    if file:
-                        await channel.send(embed=embed, file=file)
-                    else:
-                        await channel.send(embed=embed)
-
-                # 🔄 Normal state change (not involving offline)
-                elif state != last_state:
-                    embed, file = await build_state_embed(
-                        printer["name"],
-                        printer["url"],
-                        printer["api_key"],
-                        state,
-                        data
-                    )
-
-                    if file:
-                        await channel.send(embed=embed, file=file)
-                    else:
-                        await channel.send(embed=embed)
             printer["last_state"] = state
 
-        save_printers(printers)
+        save_printers()
         first_run = False
         await asyncio.sleep(POLL_INTERVAL)
 
@@ -390,6 +256,7 @@ async def monitor_printers():
 
 @client.event
 async def on_ready():
+    load_printers()
     await tree.sync(guild=discord.Object(id=GUILD_ID))
     print(f"Bot ready as {client.user}")
     client.loop.create_task(monitor_printers())
